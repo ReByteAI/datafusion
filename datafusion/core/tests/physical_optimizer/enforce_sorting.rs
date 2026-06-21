@@ -211,15 +211,15 @@ async fn test_remove_unnecessary_sort5() -> Result<()> {
     let physical_plan = sort_exec([sort_expr("a", &join.schema())].into(), join);
 
     let test = EnforceSortingTest::new(physical_plan).with_repartition_sorts(true);
-    assert_snapshot!(test.run(), @r"
+    assert_snapshot!(test.run(), @"
     Input Plan:
     SortExec: expr=[a@2 ASC], preserve_partitioning=[false]
-      HashJoinExec: mode=Partitioned, join_type=Inner, on=[(col_a@0, c@2)]
+      HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(col_a@0, c@2)]
         DataSourceExec: partitions=1, partition_sizes=[0]
         DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], output_ordering=[a@0 ASC], file_type=parquet
 
     Optimized Plan:
-    HashJoinExec: mode=Partitioned, join_type=Inner, on=[(col_a@0, c@2)]
+    HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(col_a@0, c@2)]
       DataSourceExec: partitions=1, partition_sizes=[0]
       DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], output_ordering=[a@0 ASC], file_type=parquet
     ");

@@ -1828,13 +1828,111 @@ async fn test_window_function_with_column() -> Result<()> {
     let df_results = df.clone().collect().await?;
     assert_snapshot!(
         batches_to_sort_string(&df_results),
-        @r"
-    +----+----+-----+-----+---+
-    | c1 | c2 | c3  | s   | r |
-    +----+----+-----+-----+---+
-    | c  | 2  | 1   | 3   | 1 |
-    | d  | 5  | -40 | -35 | 2 |
-    +----+----+-----+-----+---+
+        @"
+    +----+----+------+------+-----+
+    | c1 | c2 | c3   | s    | r   |
+    +----+----+------+------+-----+
+    | a  | 1  | -25  | -24  | 26  |
+    | a  | 1  | -5   | -4   | 75  |
+    | a  | 1  | -56  | -55  | 73  |
+    | a  | 1  | -85  | -84  | 4   |
+    | a  | 1  | 83   | 84   | 84  |
+    | a  | 2  | -43  | -41  | 92  |
+    | a  | 2  | -48  | -46  | 72  |
+    | a  | 2  | 45   | 47   | 29  |
+    | a  | 3  | -12  | -9   | 85  |
+    | a  | 3  | -72  | -69  | 87  |
+    | a  | 3  | 13   | 16   | 35  |
+    | a  | 3  | 13   | 16   | 8   |
+    | a  | 3  | 14   | 17   | 81  |
+    | a  | 3  | 17   | 20   | 44  |
+    | a  | 4  | -101 | -97  | 59  |
+    | a  | 4  | -38  | -34  | 10  |
+    | a  | 4  | -54  | -50  | 12  |
+    | a  | 4  | 65   | 69   | 49  |
+    | a  | 5  | -101 | -96  | 93  |
+    | a  | 5  | -31  | -26  | 28  |
+    | a  | 5  | 36   | 41   | 23  |
+    | b  | 1  | 12   | 13   | 76  |
+    | b  | 1  | 29   | 30   | 3   |
+    | b  | 1  | 54   | 55   | 15  |
+    | b  | 2  | -60  | -58  | 55  |
+    | b  | 2  | 31   | 33   | 47  |
+    | b  | 2  | 63   | 65   | 41  |
+    | b  | 2  | 68   | 70   | 62  |
+    | b  | 3  | -101 | -98  | 91  |
+    | b  | 3  | 17   | 20   | 30  |
+    | b  | 4  | -111 | -107 | 6   |
+    | b  | 4  | -117 | -113 | 58  |
+    | b  | 4  | -59  | -55  | 83  |
+    | b  | 4  | 17   | 21   | 51  |
+    | b  | 4  | 47   | 51   | 99  |
+    | b  | 5  | -44  | -39  | 94  |
+    | b  | 5  | -5   | 0    | 34  |
+    | b  | 5  | -82  | -77  | 5   |
+    | b  | 5  | 62   | 67   | 60  |
+    | b  | 5  | 68   | 73   | 46  |
+    | c  | 1  | -24  | -23  | 48  |
+    | c  | 1  | 103  | 104  | 16  |
+    | c  | 1  | 41   | 42   | 36  |
+    | c  | 1  | 70   | 71   | 63  |
+    | c  | 2  | -106 | -104 | 52  |
+    | c  | 2  | -107 | -105 | 88  |
+    | c  | 2  | -117 | -115 | 80  |
+    | c  | 2  | -29  | -27  | 25  |
+    | c  | 2  | -60  | -58  | 32  |
+    | c  | 2  | 1    | 3    | 1   |
+    | c  | 2  | 29   | 31   | 82  |
+    | c  | 3  | -2   | 1    | 39  |
+    | c  | 3  | 22   | 25   | 40  |
+    | c  | 3  | 73   | 76   | 38  |
+    | c  | 3  | 97   | 100  | 90  |
+    | c  | 4  | -79  | -75  | 61  |
+    | c  | 4  | -90  | -86  | 78  |
+    | c  | 4  | 123  | 127  | 27  |
+    | c  | 4  | 3    | 7    | 86  |
+    | c  | 5  | -94  | -89  | 68  |
+    | c  | 5  | 118  | 123  | 89  |
+    | d  | 1  | -72  | -71  | 69  |
+    | d  | 1  | -8   | -7   | 43  |
+    | d  | 1  | -98  | -97  | 18  |
+    | d  | 1  | -99  | -98  | 22  |
+    | d  | 1  | 125  | 126  | 50  |
+    | d  | 1  | 38   | 39   | 9   |
+    | d  | 1  | 57   | 58   | 11  |
+    | d  | 2  | 113  | 115  | 14  |
+    | d  | 2  | 122  | 124  | 66  |
+    | d  | 2  | 93   | 95   | 37  |
+    | d  | 3  | -76  | -73  | 56  |
+    | d  | 3  | 123  | 126  | 98  |
+    | d  | 3  | 77   | 80   | 19  |
+    | d  | 4  | 102  | 106  | 42  |
+    | d  | 4  | 5    | 9    | 95  |
+    | d  | 4  | 55   | 59   | 54  |
+    | d  | 5  | -40  | -35  | 2   |
+    | d  | 5  | -59  | -54  | 53  |
+    | e  | 1  | 120  | 121  | 96  |
+    | e  | 1  | 36   | 37   | 33  |
+    | e  | 1  | 71   | 72   | 70  |
+    | e  | 2  | -61  | -59  | 64  |
+    | e  | 2  | 49   | 51   | 17  |
+    | e  | 2  | 52   | 54   | 45  |
+    | e  | 2  | 52   | 54   | 74  |
+    | e  | 2  | 97   | 99   | 20  |
+    | e  | 3  | -95  | -92  | 97  |
+    | e  | 3  | 104  | 107  | 7   |
+    | e  | 3  | 112  | 115  | 13  |
+    | e  | 3  | 71   | 74   | 67  |
+    | e  | 4  | -53  | -49  | 24  |
+    | e  | 4  | -56  | -52  | 21  |
+    | e  | 4  | 30   | 34   | 100 |
+    | e  | 4  | 73   | 77   | 57  |
+    | e  | 4  | 74   | 78   | 65  |
+    | e  | 4  | 96   | 100  | 71  |
+    | e  | 4  | 97   | 101  | 31  |
+    | e  | 5  | -86  | -81  | 79  |
+    | e  | 5  | 64   | 69   | 77  |
+    +----+----+------+------+-----+
     "
     );
 
@@ -2898,25 +2996,23 @@ async fn test_count_wildcard_on_sort() -> Result<()> {
 
     assert_snapshot!(
         pretty_format_batches(&sql_results).unwrap(),
-        @r"
-    +---------------+------------------------------------------------------------------------------------------------------------+
-    | plan_type     | plan                                                                                                       |
-    +---------------+------------------------------------------------------------------------------------------------------------+
-    | logical_plan  | Projection: t1.b, count(*)                                                                                 |
-    |               |   Sort: count(Int64(1)) AS count(*) AS count(*) ASC NULLS LAST                                             |
-    |               |     Projection: t1.b, count(Int64(1)) AS count(*), count(Int64(1))                                         |
-    |               |       Aggregate: groupBy=[[t1.b]], aggr=[[count(Int64(1))]]                                                |
-    |               |         TableScan: t1 projection=[b]                                                                       |
-    | physical_plan | ProjectionExec: expr=[b@0 as b, count(*)@1 as count(*)]                                                    |
-    |               |   SortPreservingMergeExec: [count(Int64(1))@2 ASC NULLS LAST]                                              |
-    |               |     SortExec: expr=[count(*)@1 ASC NULLS LAST], preserve_partitioning=[true]                               |
-    |               |       ProjectionExec: expr=[b@0 as b, count(Int64(1))@1 as count(*), count(Int64(1))@1 as count(Int64(1))] |
-    |               |         AggregateExec: mode=FinalPartitioned, gby=[b@0 as b], aggr=[count(Int64(1))]                       |
-    |               |           RepartitionExec: partitioning=Hash([b@0], 4), input_partitions=1                                 |
-    |               |             AggregateExec: mode=Partial, gby=[b@0 as b], aggr=[count(Int64(1))]                            |
-    |               |               DataSourceExec: partitions=1, partition_sizes=[1]                                            |
-    |               |                                                                                                            |
-    +---------------+------------------------------------------------------------------------------------------------------------+
+        @"
+    +---------------+------------------------------------------------------------------------------------+
+    | plan_type     | plan                                                                               |
+    +---------------+------------------------------------------------------------------------------------+
+    | logical_plan  | Sort: count(*) ASC NULLS LAST                                                      |
+    |               |   Projection: t1.b, count(Int64(1)) AS count(*)                                    |
+    |               |     Aggregate: groupBy=[[t1.b]], aggr=[[count(Int64(1))]]                          |
+    |               |       TableScan: t1 projection=[b]                                                 |
+    | physical_plan | SortPreservingMergeExec: [count(*)@1 ASC NULLS LAST]                               |
+    |               |   SortExec: expr=[count(*)@1 ASC NULLS LAST], preserve_partitioning=[true]         |
+    |               |     ProjectionExec: expr=[b@0 as b, count(Int64(1))@1 as count(*)]                 |
+    |               |       AggregateExec: mode=FinalPartitioned, gby=[b@0 as b], aggr=[count(Int64(1))] |
+    |               |         RepartitionExec: partitioning=Hash([b@0], 4), input_partitions=1           |
+    |               |           AggregateExec: mode=Partial, gby=[b@0 as b], aggr=[count(Int64(1))]      |
+    |               |             DataSourceExec: partitions=1, partition_sizes=[1]                      |
+    |               |                                                                                    |
+    +---------------+------------------------------------------------------------------------------------+
     "
     );
 
@@ -2954,23 +3050,23 @@ async fn test_count_wildcard_on_where_in() -> Result<()> {
 
     assert_snapshot!(
         pretty_format_batches(&sql_results).unwrap(),
-        @r"
-    +---------------+----------------------------------------------------------------------------------------------------------------------+
-    | plan_type     | plan                                                                                                                 |
-    +---------------+----------------------------------------------------------------------------------------------------------------------+
-    | logical_plan  | LeftSemi Join: CAST(t1.a AS Int64) = __correlated_sq_1.count(*)                                                      |
-    |               |   TableScan: t1 projection=[a, b]                                                                                    |
-    |               |   SubqueryAlias: __correlated_sq_1                                                                                   |
-    |               |     Projection: count(Int64(1)) AS count(*)                                                                          |
-    |               |       Aggregate: groupBy=[[]], aggr=[[count(Int64(1))]]                                                              |
-    |               |         TableScan: t2 projection=[]                                                                                  |
-    | physical_plan | HashJoinExec: mode=CollectLeft, join_type=RightSemi, on=[(count(*)@0, CAST(t1.a AS Int64)@2)], projection=[a@0, b@1] |
-    |               |   ProjectionExec: expr=[4 as count(*)]                                                                               |
-    |               |     PlaceholderRowExec                                                                                               |
-    |               |   ProjectionExec: expr=[a@0 as a, b@1 as b, CAST(a@0 AS Int64) as CAST(t1.a AS Int64)]                               |
-    |               |     DataSourceExec: partitions=1, partition_sizes=[1]                                                                |
-    |               |                                                                                                                      |
-    +---------------+----------------------------------------------------------------------------------------------------------------------+
+        @"
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | plan_type     | plan                                                                                                                                                    |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | logical_plan  | LeftSemi Join: CAST(t1.a AS Int64) = __correlated_sq_1.count(*)                                                                                         |
+    |               |   TableScan: t1 projection=[a, b]                                                                                                                       |
+    |               |   SubqueryAlias: __correlated_sq_1                                                                                                                      |
+    |               |     Projection: count(Int64(1)) AS count(*)                                                                                                             |
+    |               |       Aggregate: groupBy=[[]], aggr=[[count(Int64(1))]]                                                                                                 |
+    |               |         TableScan: t2 projection=[]                                                                                                                     |
+    | physical_plan | HashJoinExec: mode=CollectLeft, join_type=RightSemi, accumulator=MinMaxLeftAccumulator, on=[(count(*)@0, CAST(t1.a AS Int64)@2)], projection=[a@0, b@1] |
+    |               |   ProjectionExec: expr=[4 as count(*)]                                                                                                                  |
+    |               |     PlaceholderRowExec                                                                                                                                  |
+    |               |   ProjectionExec: expr=[a@0 as a, b@1 as b, CAST(a@0 AS Int64) as CAST(t1.a AS Int64)]                                                                  |
+    |               |     DataSourceExec: partitions=1, partition_sizes=[1]                                                                                                   |
+    |               |                                                                                                                                                         |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
     "
     );
 
@@ -2999,22 +3095,22 @@ async fn test_count_wildcard_on_where_in() -> Result<()> {
     // make sure sql plan same with df plan
     assert_snapshot!(
         pretty_format_batches(&df_results).unwrap(),
-        @r"
-    +---------------+----------------------------------------------------------------------------------------------------------------------+
-    | plan_type     | plan                                                                                                                 |
-    +---------------+----------------------------------------------------------------------------------------------------------------------+
-    | logical_plan  | LeftSemi Join: CAST(t1.a AS Int64) = __correlated_sq_1.count(*)                                                      |
-    |               |   TableScan: t1 projection=[a, b]                                                                                    |
-    |               |   SubqueryAlias: __correlated_sq_1                                                                                   |
-    |               |     Aggregate: groupBy=[[]], aggr=[[count(Int64(1)) AS count(*)]]                                                    |
-    |               |       TableScan: t2 projection=[]                                                                                    |
-    | physical_plan | HashJoinExec: mode=CollectLeft, join_type=RightSemi, on=[(count(*)@0, CAST(t1.a AS Int64)@2)], projection=[a@0, b@1] |
-    |               |   ProjectionExec: expr=[4 as count(*)]                                                                               |
-    |               |     PlaceholderRowExec                                                                                               |
-    |               |   ProjectionExec: expr=[a@0 as a, b@1 as b, CAST(a@0 AS Int64) as CAST(t1.a AS Int64)]                               |
-    |               |     DataSourceExec: partitions=1, partition_sizes=[1]                                                                |
-    |               |                                                                                                                      |
-    +---------------+----------------------------------------------------------------------------------------------------------------------+
+        @"
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | plan_type     | plan                                                                                                                                                    |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | logical_plan  | LeftSemi Join: CAST(t1.a AS Int64) = __correlated_sq_1.count(*)                                                                                         |
+    |               |   TableScan: t1 projection=[a, b]                                                                                                                       |
+    |               |   SubqueryAlias: __correlated_sq_1                                                                                                                      |
+    |               |     Aggregate: groupBy=[[]], aggr=[[count(Int64(1)) AS count(*)]]                                                                                       |
+    |               |       TableScan: t2 projection=[]                                                                                                                       |
+    | physical_plan | HashJoinExec: mode=CollectLeft, join_type=RightSemi, accumulator=MinMaxLeftAccumulator, on=[(count(*)@0, CAST(t1.a AS Int64)@2)], projection=[a@0, b@1] |
+    |               |   ProjectionExec: expr=[4 as count(*)]                                                                                                                  |
+    |               |     PlaceholderRowExec                                                                                                                                  |
+    |               |   ProjectionExec: expr=[a@0 as a, b@1 as b, CAST(a@0 AS Int64) as CAST(t1.a AS Int64)]                                                                  |
+    |               |     DataSourceExec: partitions=1, partition_sizes=[1]                                                                                                   |
+    |               |                                                                                                                                                         |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
     "
     );
 
@@ -3328,32 +3424,32 @@ async fn test_count_wildcard_on_where_scalar_subquery() -> Result<()> {
 
     assert_snapshot!(
         pretty_format_batches(&sql_results).unwrap(),
-        @r"
-    +---------------+----------------------------------------------------------------------------------------------------------------------------+
-    | plan_type     | plan                                                                                                                       |
-    +---------------+----------------------------------------------------------------------------------------------------------------------------+
-    | logical_plan  | Projection: t1.a, t1.b                                                                                                     |
-    |               |   Filter: CASE WHEN __scalar_sq_1.__always_true IS NULL THEN Int64(0) ELSE __scalar_sq_1.count(*) END > Int64(0)           |
-    |               |     Projection: t1.a, t1.b, __scalar_sq_1.count(*), __scalar_sq_1.__always_true                                            |
-    |               |       Left Join: t1.a = __scalar_sq_1.a                                                                                    |
-    |               |         TableScan: t1 projection=[a, b]                                                                                    |
-    |               |         SubqueryAlias: __scalar_sq_1                                                                                       |
-    |               |           Projection: count(Int64(1)) AS count(*), t2.a, Boolean(true) AS __always_true                                    |
-    |               |             Aggregate: groupBy=[[t2.a]], aggr=[[count(Int64(1))]]                                                          |
-    |               |               TableScan: t2 projection=[a]                                                                                 |
-    | physical_plan | FilterExec: CASE WHEN __always_true@3 IS NULL THEN 0 ELSE count(*)@2 END > 0, projection=[a@0, b@1]                        |
-    |               |   RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1                                                     |
-    |               |     ProjectionExec: expr=[a@2 as a, b@3 as b, count(*)@0 as count(*), __always_true@1 as __always_true]                    |
-    |               |       HashJoinExec: mode=CollectLeft, join_type=Right, on=[(a@1, a@0)], projection=[count(*)@0, __always_true@2, a@3, b@4] |
-    |               |         CoalescePartitionsExec                                                                                             |
-    |               |           ProjectionExec: expr=[count(Int64(1))@1 as count(*), a@0 as a, true as __always_true]                            |
-    |               |             AggregateExec: mode=FinalPartitioned, gby=[a@0 as a], aggr=[count(Int64(1))]                                   |
-    |               |               RepartitionExec: partitioning=Hash([a@0], 4), input_partitions=1                                             |
-    |               |                 AggregateExec: mode=Partial, gby=[a@0 as a], aggr=[count(Int64(1))]                                        |
-    |               |                   DataSourceExec: partitions=1, partition_sizes=[1]                                                        |
-    |               |         DataSourceExec: partitions=1, partition_sizes=[1]                                                                  |
-    |               |                                                                                                                            |
-    +---------------+----------------------------------------------------------------------------------------------------------------------------+
+        @"
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | plan_type     | plan                                                                                                                                                          |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | logical_plan  | Projection: t1.a, t1.b                                                                                                                                        |
+    |               |   Filter: CASE WHEN __scalar_sq_1.__always_true IS NULL THEN Int64(0) ELSE __scalar_sq_1.count(*) END > Int64(0)                                              |
+    |               |     Projection: t1.a, t1.b, __scalar_sq_1.count(*), __scalar_sq_1.__always_true                                                                               |
+    |               |       Left Join: t1.a = __scalar_sq_1.a                                                                                                                       |
+    |               |         TableScan: t1 projection=[a, b]                                                                                                                       |
+    |               |         SubqueryAlias: __scalar_sq_1                                                                                                                          |
+    |               |           Projection: count(Int64(1)) AS count(*), t2.a, Boolean(true) AS __always_true                                                                       |
+    |               |             Aggregate: groupBy=[[t2.a]], aggr=[[count(Int64(1))]]                                                                                             |
+    |               |               TableScan: t2 projection=[a]                                                                                                                    |
+    | physical_plan | FilterExec: CASE WHEN __always_true@3 IS NULL THEN 0 ELSE count(*)@2 END > 0, projection=[a@0, b@1]                                                           |
+    |               |   RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1                                                                                        |
+    |               |     ProjectionExec: expr=[a@2 as a, b@3 as b, count(*)@0 as count(*), __always_true@1 as __always_true]                                                       |
+    |               |       HashJoinExec: mode=CollectLeft, join_type=Right, accumulator=MinMaxLeftAccumulator, on=[(a@1, a@0)], projection=[count(*)@0, __always_true@2, a@3, b@4] |
+    |               |         CoalescePartitionsExec                                                                                                                                |
+    |               |           ProjectionExec: expr=[count(Int64(1))@1 as count(*), a@0 as a, true as __always_true]                                                               |
+    |               |             AggregateExec: mode=FinalPartitioned, gby=[a@0 as a], aggr=[count(Int64(1))]                                                                      |
+    |               |               RepartitionExec: partitioning=Hash([a@0], 4), input_partitions=1                                                                                |
+    |               |                 AggregateExec: mode=Partial, gby=[a@0 as a], aggr=[count(Int64(1))]                                                                           |
+    |               |                   DataSourceExec: partitions=1, partition_sizes=[1]                                                                                           |
+    |               |         DataSourceExec: partitions=1, partition_sizes=[1]                                                                                                     |
+    |               |                                                                                                                                                               |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
     "
     );
 
@@ -3384,32 +3480,32 @@ async fn test_count_wildcard_on_where_scalar_subquery() -> Result<()> {
 
     assert_snapshot!(
         pretty_format_batches(&df_results).unwrap(),
-        @r"
-    +---------------+----------------------------------------------------------------------------------------------------------------------------+
-    | plan_type     | plan                                                                                                                       |
-    +---------------+----------------------------------------------------------------------------------------------------------------------------+
-    | logical_plan  | Projection: t1.a, t1.b                                                                                                     |
-    |               |   Filter: CASE WHEN __scalar_sq_1.__always_true IS NULL THEN Int64(0) ELSE __scalar_sq_1.count(*) END > Int64(0)           |
-    |               |     Projection: t1.a, t1.b, __scalar_sq_1.count(*), __scalar_sq_1.__always_true                                            |
-    |               |       Left Join: t1.a = __scalar_sq_1.a                                                                                    |
-    |               |         TableScan: t1 projection=[a, b]                                                                                    |
-    |               |         SubqueryAlias: __scalar_sq_1                                                                                       |
-    |               |           Projection: count(*), t2.a, Boolean(true) AS __always_true                                                       |
-    |               |             Aggregate: groupBy=[[t2.a]], aggr=[[count(Int64(1)) AS count(*)]]                                              |
-    |               |               TableScan: t2 projection=[a]                                                                                 |
-    | physical_plan | FilterExec: CASE WHEN __always_true@3 IS NULL THEN 0 ELSE count(*)@2 END > 0, projection=[a@0, b@1]                        |
-    |               |   RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1                                                     |
-    |               |     ProjectionExec: expr=[a@2 as a, b@3 as b, count(*)@0 as count(*), __always_true@1 as __always_true]                    |
-    |               |       HashJoinExec: mode=CollectLeft, join_type=Right, on=[(a@1, a@0)], projection=[count(*)@0, __always_true@2, a@3, b@4] |
-    |               |         CoalescePartitionsExec                                                                                             |
-    |               |           ProjectionExec: expr=[count(*)@1 as count(*), a@0 as a, true as __always_true]                                   |
-    |               |             AggregateExec: mode=FinalPartitioned, gby=[a@0 as a], aggr=[count(*)]                                          |
-    |               |               RepartitionExec: partitioning=Hash([a@0], 4), input_partitions=1                                             |
-    |               |                 AggregateExec: mode=Partial, gby=[a@0 as a], aggr=[count(*)]                                               |
-    |               |                   DataSourceExec: partitions=1, partition_sizes=[1]                                                        |
-    |               |         DataSourceExec: partitions=1, partition_sizes=[1]                                                                  |
-    |               |                                                                                                                            |
-    +---------------+----------------------------------------------------------------------------------------------------------------------------+
+        @"
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | plan_type     | plan                                                                                                                                                          |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
+    | logical_plan  | Projection: t1.a, t1.b                                                                                                                                        |
+    |               |   Filter: CASE WHEN __scalar_sq_1.__always_true IS NULL THEN Int64(0) ELSE __scalar_sq_1.count(*) END > Int64(0)                                              |
+    |               |     Projection: t1.a, t1.b, __scalar_sq_1.count(*), __scalar_sq_1.__always_true                                                                               |
+    |               |       Left Join: t1.a = __scalar_sq_1.a                                                                                                                       |
+    |               |         TableScan: t1 projection=[a, b]                                                                                                                       |
+    |               |         SubqueryAlias: __scalar_sq_1                                                                                                                          |
+    |               |           Projection: count(*), t2.a, Boolean(true) AS __always_true                                                                                          |
+    |               |             Aggregate: groupBy=[[t2.a]], aggr=[[count(Int64(1)) AS count(*)]]                                                                                 |
+    |               |               TableScan: t2 projection=[a]                                                                                                                    |
+    | physical_plan | FilterExec: CASE WHEN __always_true@3 IS NULL THEN 0 ELSE count(*)@2 END > 0, projection=[a@0, b@1]                                                           |
+    |               |   RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1                                                                                        |
+    |               |     ProjectionExec: expr=[a@2 as a, b@3 as b, count(*)@0 as count(*), __always_true@1 as __always_true]                                                       |
+    |               |       HashJoinExec: mode=CollectLeft, join_type=Right, accumulator=MinMaxLeftAccumulator, on=[(a@1, a@0)], projection=[count(*)@0, __always_true@2, a@3, b@4] |
+    |               |         CoalescePartitionsExec                                                                                                                                |
+    |               |           ProjectionExec: expr=[count(*)@1 as count(*), a@0 as a, true as __always_true]                                                                      |
+    |               |             AggregateExec: mode=FinalPartitioned, gby=[a@0 as a], aggr=[count(*)]                                                                             |
+    |               |               RepartitionExec: partitioning=Hash([a@0], 4), input_partitions=1                                                                                |
+    |               |                 AggregateExec: mode=Partial, gby=[a@0 as a], aggr=[count(*)]                                                                                  |
+    |               |                   DataSourceExec: partitions=1, partition_sizes=[1]                                                                                           |
+    |               |         DataSourceExec: partitions=1, partition_sizes=[1]                                                                                                     |
+    |               |                                                                                                                                                               |
+    +---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------+
     "
     );
 

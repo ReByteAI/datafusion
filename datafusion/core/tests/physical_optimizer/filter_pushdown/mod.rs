@@ -260,9 +260,9 @@ async fn test_dynamic_filter_pushdown_through_hash_join_with_topk() {
     // Test that filters are pushed down correctly to each side of the join
     insta::assert_snapshot!(
         format_plan_for_test(&plan),
-        @r"
+        @"
     - SortExec: TopK(fetch=2), expr=[e@4 ASC], preserve_partitioning=[false]
-    -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, d@0)]
+    -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ empty ] AND DynamicFilter [ empty ]
     "
@@ -284,9 +284,9 @@ async fn test_dynamic_filter_pushdown_through_hash_join_with_topk() {
     // NOTE: We dropped the CASE expression here because we now optimize that away if there's only 1 partition
     insta::assert_snapshot!(
         format_plan_for_test(&plan),
-        @r"
+        @"
     - SortExec: TopK(fetch=2), expr=[e@4 ASC], preserve_partitioning=[false], filter=[e@4 IS NULL OR e@4 < bb]
-    -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, d@0)]
+    -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ d@0 >= aa AND d@0 <= ab AND d@0 IN (SET) ([aa, ab]) ] AND DynamicFilter [ e@1 IS NULL OR e@1 < bb ]
     "
@@ -383,19 +383,19 @@ async fn test_static_filter_pushdown_through_hash_join() {
     // Test that filters are pushed down correctly to each side of the join
     insta::assert_snapshot!(
         OptimizationTest::new(Arc::clone(&plan), FilterPushdown::new(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
         - FilterExec: a@0 = d@3
         -   FilterExec: e@4 = ba
         -     FilterExec: a@0 = aa
-        -       HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, d@0)]
+        -       HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
         -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
         -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true
       output:
         Ok:
           - FilterExec: a@0 = d@3
-          -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, d@0)]
+          -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true, predicate=a@0 = aa
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true, predicate=e@1 = ba
     "
@@ -431,17 +431,17 @@ async fn test_static_filter_pushdown_through_hash_join() {
     // Test that filters are NOT pushed down for left join
     insta::assert_snapshot!(
         OptimizationTest::new(plan, FilterPushdown::new(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
         - FilterExec: a@0 = aa
-        -   HashJoinExec: mode=Partitioned, join_type=Left, on=[(a@0, d@0)]
+        -   HashJoinExec: mode=Partitioned, join_type=Left, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
         -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
         -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true
       output:
         Ok:
           - FilterExec: a@0 = aa
-          -   HashJoinExec: mode=Partitioned, join_type=Left, on=[(a@0, d@0)]
+          -   HashJoinExec: mode=Partitioned, join_type=Left, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true
     "
@@ -1047,15 +1047,15 @@ async fn test_hashjoin_dynamic_filter_pushdown() {
     // expect the predicate to be pushed down into the probe side DataSource
     insta::assert_snapshot!(
         OptimizationTest::new(Arc::clone(&plan), FilterPushdown::new_post_optimization(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
-        - HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+        - HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
         -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
         -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, e], file_type=test, pushdown_supported=true
       output:
         Ok:
-          - HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+          - HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
           -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
           -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, e], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ empty ]
     ",
@@ -1088,8 +1088,8 @@ async fn test_hashjoin_dynamic_filter_pushdown() {
     // Now check what our filter looks like
     insta::assert_snapshot!(
         format!("{}", format_plan_for_test(&plan)),
-        @r"
-    - HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+        @"
+    - HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
     -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, e], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ a@0 >= aa AND a@0 <= ab AND b@1 >= ba AND b@1 <= bb AND struct(a@0, b@1) IN (SET) ([{c0:aa,c1:ba}, {c0:ab,c1:bb}]) ]
     "
@@ -1265,13 +1265,13 @@ async fn test_hashjoin_dynamic_filter_pushdown_partitioned() {
     // expect the predicate to be pushed down into the probe side DataSource
     insta::assert_snapshot!(
         OptimizationTest::new(Arc::clone(&plan), FilterPushdown::new_post_optimization(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
         - SortExec: expr=[a@0 DESC NULLS LAST], preserve_partitioning=[false]
         -   CoalescePartitionsExec
         -     CoalesceBatchesExec: target_batch_size=8192
-        -       HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+        -       HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
         -         CoalesceBatchesExec: target_batch_size=8192
         -           RepartitionExec: partitioning=Hash([a@0, b@1], 12), input_partitions=1
         -             DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
@@ -1283,7 +1283,7 @@ async fn test_hashjoin_dynamic_filter_pushdown_partitioned() {
           - SortExec: expr=[a@0 DESC NULLS LAST], preserve_partitioning=[false]
           -   CoalescePartitionsExec
           -     CoalesceBatchesExec: target_batch_size=8192
-          -       HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+          -       HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
           -         CoalesceBatchesExec: target_batch_size=8192
           -           RepartitionExec: partitioning=Hash([a@0, b@1], 12), input_partitions=1
           -             DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
@@ -1316,11 +1316,11 @@ async fn test_hashjoin_dynamic_filter_pushdown_partitioned() {
     #[cfg(not(feature = "force_hash_collisions"))]
     insta::assert_snapshot!(
         format!("{}", format_plan_for_test(&plan)),
-        @r"
+        @"
     - SortExec: expr=[a@0 DESC NULLS LAST], preserve_partitioning=[false]
     -   CoalescePartitionsExec
     -     CoalesceBatchesExec: target_batch_size=8192
-    -       HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+    -       HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -         CoalesceBatchesExec: target_batch_size=8192
     -           RepartitionExec: partitioning=Hash([a@0, b@1], 12), input_partitions=1
     -             DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
@@ -1474,13 +1474,13 @@ async fn test_hashjoin_dynamic_filter_pushdown_collect_left() {
     // expect the predicate to be pushed down into the probe side DataSource
     insta::assert_snapshot!(
         OptimizationTest::new(Arc::clone(&plan), FilterPushdown::new_post_optimization(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
         - SortExec: expr=[a@0 DESC NULLS LAST], preserve_partitioning=[false]
         -   CoalescePartitionsExec
         -     CoalesceBatchesExec: target_batch_size=8192
-        -       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+        -       HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
         -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
         -         CoalesceBatchesExec: target_batch_size=8192
         -           RepartitionExec: partitioning=Hash([a@0, b@1], 12), input_partitions=1
@@ -1490,7 +1490,7 @@ async fn test_hashjoin_dynamic_filter_pushdown_collect_left() {
           - SortExec: expr=[a@0 DESC NULLS LAST], preserve_partitioning=[false]
           -   CoalescePartitionsExec
           -     CoalesceBatchesExec: target_batch_size=8192
-          -       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+          -       HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
           -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
           -         CoalesceBatchesExec: target_batch_size=8192
           -           RepartitionExec: partitioning=Hash([a@0, b@1], 12), input_partitions=1
@@ -1520,11 +1520,11 @@ async fn test_hashjoin_dynamic_filter_pushdown_collect_left() {
     // Now check what our filter looks like
     insta::assert_snapshot!(
         format!("{}", format_plan_for_test(&plan)),
-        @r"
+        @"
     - SortExec: expr=[a@0 DESC NULLS LAST], preserve_partitioning=[false]
     -   CoalescePartitionsExec
     -     CoalesceBatchesExec: target_batch_size=8192
-    -       HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+    -       HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
     -         CoalesceBatchesExec: target_batch_size=8192
     -           RepartitionExec: partitioning=Hash([a@0, b@1], 12), input_partitions=1
@@ -1655,19 +1655,19 @@ async fn test_nested_hashjoin_dynamic_filter_pushdown() {
     // Test that dynamic filters are pushed down correctly through nested joins
     insta::assert_snapshot!(
         OptimizationTest::new(Arc::clone(&outer_join), FilterPushdown::new_post_optimization(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
-        - HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, b@0)]
+        - HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, b@0)]
         -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, x], file_type=test, pushdown_supported=true
-        -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(c@1, d@0)]
+        -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(c@1, d@0)]
         -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[b, c, y], file_type=test, pushdown_supported=true
         -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, z], file_type=test, pushdown_supported=true
       output:
         Ok:
-          - HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, b@0)]
+          - HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, b@0)]
           -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, x], file_type=test, pushdown_supported=true
-          -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(c@1, d@0)]
+          -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(c@1, d@0)]
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[b, c, y], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ empty ]
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, z], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ empty ]
     ",
@@ -1695,10 +1695,10 @@ async fn test_nested_hashjoin_dynamic_filter_pushdown() {
     // Verify that both the inner and outer join have updated dynamic filters
     insta::assert_snapshot!(
         format!("{}", format_plan_for_test(&plan)),
-        @r"
-    - HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, b@0)]
+        @"
+    - HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, b@0)]
     -   DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, x], file_type=test, pushdown_supported=true
-    -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(c@1, d@0)]
+    -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(c@1, d@0)]
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[b, c, y], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ b@0 >= aa AND b@0 <= ab AND b@0 IN (SET) ([aa, ab]) ]
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, z], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ d@0 >= ca AND d@0 <= cb AND d@0 IN (SET) ([ca, cb]) ]
     "
@@ -1791,19 +1791,19 @@ async fn test_hashjoin_parent_filter_pushdown() {
     // Test that filters are pushed down correctly to each side of the join
     insta::assert_snapshot!(
         OptimizationTest::new(Arc::clone(&plan), FilterPushdown::new(), true),
-        @r"
+        @"
     OptimizationTest:
       input:
         - FilterExec: a@0 = d@3
         -   FilterExec: e@4 = ba
         -     FilterExec: a@0 = aa
-        -       HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, d@0)]
+        -       HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
         -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true
         -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true
       output:
         Ok:
           - FilterExec: a@0 = d@3
-          -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, d@0)]
+          -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, d@0)]
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true, predicate=a@0 = aa
           -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[d, e, f], file_type=test, pushdown_supported=true, predicate=e@1 = ba
     "
@@ -2886,9 +2886,9 @@ async fn test_hashjoin_dynamic_filter_all_partitions_empty() {
 
     insta::assert_snapshot!(
         format_plan_for_test(&plan),
-        @r"
+        @"
     - CoalesceBatchesExec: target_batch_size=8192
-    -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+    -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -     CoalesceBatchesExec: target_batch_size=8192
     -       RepartitionExec: partitioning=Hash([a@0, b@1], 4), input_partitions=1
     -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b], file_type=test, pushdown_supported=true
@@ -2914,9 +2914,9 @@ async fn test_hashjoin_dynamic_filter_all_partitions_empty() {
     // Test that filters are pushed down correctly to each side of the join
     insta::assert_snapshot!(
         format_plan_for_test(&plan),
-        @r"
+        @"
     - CoalesceBatchesExec: target_batch_size=8192
-    -   HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+    -   HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -     CoalesceBatchesExec: target_batch_size=8192
     -       RepartitionExec: partitioning=Hash([a@0, b@1], 4), input_partitions=1
     -         DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b], file_type=test, pushdown_supported=true
@@ -3023,9 +3023,9 @@ async fn test_hashjoin_dynamic_filter_with_nulls() {
 
     insta::assert_snapshot!(
         format_plan_for_test(&plan),
-        @r"
+        @"
     - CoalesceBatchesExec: target_batch_size=8192
-    -   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+    -   HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b], file_type=test, pushdown_supported=true
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ empty ]
     "
@@ -3047,9 +3047,9 @@ async fn test_hashjoin_dynamic_filter_with_nulls() {
     // Test that filters are pushed down correctly to each side of the join
     insta::assert_snapshot!(
         format_plan_for_test(&plan),
-        @r"
+        @"
     - CoalesceBatchesExec: target_batch_size=8192
-    -   HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(a@0, a@0), (b@1, b@1)]
+    -   HashJoinExec: mode=CollectLeft, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a@0), (b@1, b@1)]
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b], file_type=test, pushdown_supported=true
     -     DataSourceExec: file_groups={1 group: [[test.parquet]]}, projection=[a, b, c], file_type=test, pushdown_supported=true, predicate=DynamicFilter [ a@0 >= aa AND a@0 <= ab AND b@1 >= 1 AND b@1 <= 2 AND struct(a@0, b@1) IN (SET) ([{c0:aa,c1:1}, {c0:,c1:2}, {c0:ab,c1:}]) ]
     "

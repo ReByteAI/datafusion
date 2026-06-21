@@ -625,9 +625,9 @@ fn multi_hash_joins() -> Result<()> {
                     // Should include 3 RepartitionExecs
                     JoinType::Inner | JoinType::Left | JoinType::LeftSemi | JoinType::LeftAnti | JoinType::LeftMark => {
 
-                                assert_plan!(plan_distrib, @r"
-                                HashJoinExec: mode=Partitioned, join_type=..., on=[(a@0, c@2)]
-                                  HashJoinExec: mode=Partitioned, join_type=..., on=[(a@0, b1@1)]
+                                assert_plan!(plan_distrib, @"
+                                HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(a@0, c@2)]
+                                  HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(a@0, b1@1)]
                                     RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
                                       DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
                                     RepartitionExec: partitioning=Hash([b1@1], 10), input_partitions=1
@@ -639,10 +639,10 @@ fn multi_hash_joins() -> Result<()> {
                             },
                     // Should include 4 RepartitionExecs
                     _ => {
-                                assert_plan!(plan_distrib, @r"
-                                HashJoinExec: mode=Partitioned, join_type=..., on=[(a@0, c@2)]
+                                assert_plan!(plan_distrib, @"
+                                HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(a@0, c@2)]
                                   RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=10
-                                    HashJoinExec: mode=Partitioned, join_type=..., on=[(a@0, b1@1)]
+                                    HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(a@0, b1@1)]
                                       RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
                                         DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
                                       RepartitionExec: partitioning=Hash([b1@1], 10), input_partitions=1
@@ -691,9 +691,9 @@ fn multi_hash_joins() -> Result<()> {
                             },
                     // Should include 3 RepartitionExecs but have a different "on"
                             JoinType::RightSemi | JoinType::RightAnti => {
-                            assert_plan!(plan_distrib, @r"
-                            HashJoinExec: mode=Partitioned, join_type=..., on=[(b1@1, c@2)]
-                              HashJoinExec: mode=Partitioned, join_type=..., on=[(a@0, b1@1)]
+                            assert_plan!(plan_distrib, @"
+                            HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(b1@1, c@2)]
+                              HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(a@0, b1@1)]
                                 RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
                                   DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
                                 RepartitionExec: partitioning=Hash([b1@1], 10), input_partitions=1
@@ -707,10 +707,10 @@ fn multi_hash_joins() -> Result<()> {
 
                     // Should include 4 RepartitionExecs
                     _ => {
-                            assert_plan!(plan_distrib, @r"
-                            HashJoinExec: mode=Partitioned, join_type=..., on=[(b1@6, c@2)]
+                            assert_plan!(plan_distrib, @"
+                            HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(b1@6, c@2)]
                               RepartitionExec: partitioning=Hash([b1@6], 10), input_partitions=10
-                                HashJoinExec: mode=Partitioned, join_type=..., on=[(a@0, b1@1)]
+                                HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(a@0, b1@1)]
                                   RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
                                     DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
                                   RepartitionExec: partitioning=Hash([b1@1], 10), input_partitions=1
@@ -774,10 +774,10 @@ fn multi_joins_after_alias() -> Result<()> {
     let plan_distrib = test_config.to_plan(top_join.clone(), &DISTRIB_DISTRIB_SORT);
     assert_plan!(
         plan_distrib,
-        @r"
-    HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a1@0, c@2)]
+        @"
+    HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a1@0, c@2)]
       ProjectionExec: expr=[a@0 as a1, a@0 as a2]
-        HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, b@1)]
+        HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, b@1)]
           RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
             DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
           RepartitionExec: partitioning=Hash([b@1], 10), input_partitions=1
@@ -802,10 +802,10 @@ fn multi_joins_after_alias() -> Result<()> {
     let plan_distrib = test_config.to_plan(top_join.clone(), &DISTRIB_DISTRIB_SORT);
     assert_plan!(
         plan_distrib,
-        @r"
-    HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a2@1, c@2)]
+        @"
+    HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a2@1, c@2)]
       ProjectionExec: expr=[a@0 as a1, a@0 as a2]
-        HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, b@1)]
+        HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, b@1)]
           RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
             DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
           RepartitionExec: partitioning=Hash([b@1], 10), input_partitions=1
@@ -855,12 +855,12 @@ fn multi_joins_after_multi_alias() -> Result<()> {
     let plan_distrib = test_config.to_plan(top_join.clone(), &DISTRIB_DISTRIB_SORT);
     assert_plan!(
         plan_distrib,
-        @r"
-    HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, c@2)]
+        @"
+    HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, c@2)]
       RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=10
         ProjectionExec: expr=[c1@0 as a]
           ProjectionExec: expr=[c@2 as c1]
-            HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, b@1)]
+            HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, b@1)]
               RepartitionExec: partitioning=Hash([a@0], 10), input_partitions=1
                 DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
               RepartitionExec: partitioning=Hash([b@1], 10), input_partitions=1
@@ -900,8 +900,8 @@ fn join_after_agg_alias() -> Result<()> {
     let plan_distrib = test_config.to_plan(join.clone(), &DISTRIB_DISTRIB_SORT);
     assert_plan!(
         plan_distrib,
-        @r"
-    HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a1@0, a2@0)]
+        @"
+    HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a1@0, a2@0)]
       AggregateExec: mode=FinalPartitioned, gby=[a1@0 as a1], aggr=[]
         RepartitionExec: partitioning=Hash([a1@0], 10), input_partitions=10
           AggregateExec: mode=Partial, gby=[a@0 as a1], aggr=[]
@@ -957,8 +957,8 @@ fn hash_join_key_ordering() -> Result<()> {
     let plan_distrib = test_config.to_plan(join.clone(), &DISTRIB_DISTRIB_SORT);
     assert_plan!(
         plan_distrib,
-        @r"
-    HashJoinExec: mode=Partitioned, join_type=Inner, on=[(b1@1, b@0), (a1@0, a@1)]
+        @"
+    HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(b1@1, b@0), (a1@0, a@1)]
       ProjectionExec: expr=[a1@1 as a1, b1@0 as b1]
         AggregateExec: mode=FinalPartitioned, gby=[b1@0 as b1, a1@1 as a1], aggr=[]
           RepartitionExec: partitioning=Hash([b1@0, a1@1], 10), input_partitions=10
@@ -1082,17 +1082,17 @@ fn multi_hash_join_key_ordering() -> Result<()> {
         test_config.to_plan(filter_top_join.clone(), &DISTRIB_DISTRIB_SORT);
     assert_plan!(
         plan_distrib,
-        @r"
+        @"
     FilterExec: c@6 > 1
-      HashJoinExec: mode=Partitioned, join_type=Inner, on=[(B@2, b1@6), (C@3, c@2), (AA@1, a1@5)]
+      HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(B@2, b1@6), (C@3, c@2), (AA@1, a1@5)]
         ProjectionExec: expr=[a@0 as A, a@0 as AA, b@1 as B, c@2 as C]
-          HashJoinExec: mode=Partitioned, join_type=Inner, on=[(b@1, b1@1), (c@2, c1@2), (a@0, a1@0)]
+          HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(b@1, b1@1), (c@2, c1@2), (a@0, a1@0)]
             RepartitionExec: partitioning=Hash([b@1, c@2, a@0], 10), input_partitions=1
               DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
             RepartitionExec: partitioning=Hash([b1@1, c1@2, a1@0], 10), input_partitions=1
               ProjectionExec: expr=[a@0 as a1, b@1 as b1, c@2 as c1]
                 DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
-        HashJoinExec: mode=Partitioned, join_type=Inner, on=[(b@1, b1@1), (c@2, c1@2), (a@0, a1@0)]
+        HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(b@1, b1@1), (c@2, c1@2), (a@0, a1@0)]
           RepartitionExec: partitioning=Hash([b@1, c@2, a@0], 10), input_partitions=1
             DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
           RepartitionExec: partitioning=Hash([b1@1, c1@2, a1@0], 10), input_partitions=1
@@ -1220,16 +1220,16 @@ fn reorder_join_keys_to_left_input() -> Result<()> {
             hide_first(reordered.as_ref(), r"join_type=(\w+)", "join_type=...");
         assert_eq!(captured_join_type, join_type.to_string());
 
-        insta::allow_duplicates! {insta::assert_snapshot!(modified_plan, @r"
-        HashJoinExec: mode=Partitioned, join_type=..., on=[(AA@1, a1@5), (B@2, b1@6), (C@3, c@2)]
+        insta::allow_duplicates! {insta::assert_snapshot!(modified_plan, @"
+        HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(AA@1, a1@5), (B@2, b1@6), (C@3, c@2)]
           ProjectionExec: expr=[a@0 as A, a@0 as AA, b@1 as B, c@2 as C]
-            HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a1@0), (b@1, b1@1), (c@2, c1@2)]
+            HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a1@0), (b@1, b1@1), (c@2, c1@2)]
               RepartitionExec: partitioning=Hash([a@0, b@1, c@2], 10), input_partitions=1
                 DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
               RepartitionExec: partitioning=Hash([a1@0, b1@1, c1@2], 10), input_partitions=1
                 ProjectionExec: expr=[a@0 as a1, b@1 as b1, c@2 as c1]
                   DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
-          HashJoinExec: mode=Partitioned, join_type=Inner, on=[(c@2, c1@2), (b@1, b1@1), (a@0, a1@0)]
+          HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(c@2, c1@2), (b@1, b1@1), (a@0, a1@0)]
             RepartitionExec: partitioning=Hash([c@2, b@1, a@0], 10), input_partitions=1
               DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
             RepartitionExec: partitioning=Hash([c1@2, b1@1, a1@0], 10), input_partitions=1
@@ -1348,16 +1348,16 @@ fn reorder_join_keys_to_right_input() -> Result<()> {
         // The top joins' join key ordering is adjusted based on the children inputs.
         let (_, plan_str) =
             hide_first(reordered.as_ref(), r"join_type=(\w+)", "join_type=...");
-        insta::allow_duplicates! {insta::assert_snapshot!(plan_str, @r"
-        HashJoinExec: mode=Partitioned, join_type=..., on=[(C@3, c@2), (B@2, b1@6), (AA@1, a1@5)]
+        insta::allow_duplicates! {insta::assert_snapshot!(plan_str, @"
+        HashJoinExec: mode=Partitioned, join_type=..., accumulator=MinMaxLeftAccumulator, on=[(C@3, c@2), (B@2, b1@6), (AA@1, a1@5)]
           ProjectionExec: expr=[a@0 as A, a@0 as AA, b@1 as B, c@2 as C]
-            HashJoinExec: mode=Partitioned, join_type=Inner, on=[(a@0, a1@0), (b@1, b1@1)]
+            HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(a@0, a1@0), (b@1, b1@1)]
               RepartitionExec: partitioning=Hash([a@0, b@1], 10), input_partitions=1
                 DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
               RepartitionExec: partitioning=Hash([a1@0, b1@1], 10), input_partitions=1
                 ProjectionExec: expr=[a@0 as a1, b@1 as b1, c@2 as c1]
                   DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
-          HashJoinExec: mode=Partitioned, join_type=Inner, on=[(c@2, c1@2), (b@1, b1@1), (a@0, a1@0)]
+          HashJoinExec: mode=Partitioned, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(c@2, c1@2), (b@1, b1@1), (a@0, a1@0)]
             RepartitionExec: partitioning=Hash([c@2, b@1, a@0], 10), input_partitions=1
               DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=parquet
             RepartitionExec: partitioning=Hash([c1@2, b1@1, a1@0], 10), input_partitions=1

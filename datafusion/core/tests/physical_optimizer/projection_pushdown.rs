@@ -1299,9 +1299,9 @@ fn test_hash_join_after_projection() -> Result<()> {
     let actual = initial.trim();
     assert_snapshot!(
         actual,
-        @r"
+        @"
     ProjectionExec: expr=[c@2 as c_from_left, b@1 as b_from_left, a@0 as a_from_left, c@7 as c_from_right]
-      HashJoinExec: mode=Auto, join_type=Inner, on=[(b@1, c@2)], filter=b_left_inter@0 - 1 + a_right_inter@1 <= a_right_inter@1 + c_left_inter@2
+      HashJoinExec: mode=Auto, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(b@1, c@2)], filter=b_left_inter@0 - 1 + a_right_inter@1 <= a_right_inter@1 + c_left_inter@2
         DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=csv, has_header=false
         DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=csv, has_header=false
     "
@@ -1317,9 +1317,9 @@ fn test_hash_join_after_projection() -> Result<()> {
     // HashJoinExec only returns result after projection. Because there are some alias columns in the projection, the ProjectionExec is not removed.
     assert_snapshot!(
         actual,
-        @r"
+        @"
     ProjectionExec: expr=[c@2 as c_from_left, b@1 as b_from_left, a@0 as a_from_left, c@3 as c_from_right]
-      HashJoinExec: mode=Auto, join_type=Inner, on=[(b@1, c@2)], filter=b_left_inter@0 - 1 + a_right_inter@1 <= a_right_inter@1 + c_left_inter@2, projection=[a@0, b@1, c@2, c@7]
+      HashJoinExec: mode=Auto, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(b@1, c@2)], filter=b_left_inter@0 - 1 + a_right_inter@1 <= a_right_inter@1 + c_left_inter@2, projection=[a@0, b@1, c@2, c@7]
         DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=csv, has_header=false
         DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=csv, has_header=false
     "
@@ -1345,8 +1345,8 @@ fn test_hash_join_after_projection() -> Result<()> {
     // Comparing to the previous result, this projection don't have alias columns either change the order of output fields. So the ProjectionExec is removed.
     assert_snapshot!(
         actual,
-        @r"
-    HashJoinExec: mode=Auto, join_type=Inner, on=[(b@1, c@2)], filter=b_left_inter@0 - 1 + a_right_inter@1 <= a_right_inter@1 + c_left_inter@2, projection=[a@0, b@1, c@2, c@7]
+        @"
+    HashJoinExec: mode=Auto, join_type=Inner, accumulator=MinMaxLeftAccumulator, on=[(b@1, c@2)], filter=b_left_inter@0 - 1 + a_right_inter@1 <= a_right_inter@1 + c_left_inter@2, projection=[a@0, b@1, c@2, c@7]
       DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=csv, has_header=false
       DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], file_type=csv, has_header=false
     "

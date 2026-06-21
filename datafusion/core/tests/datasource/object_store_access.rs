@@ -466,7 +466,7 @@ async fn query_single_parquet_file() {
     let test = Test::new().with_single_file_parquet().await;
     assert_snapshot!(
         test.query("select count(distinct a), count(b) from parquet_table").await,
-        @r"
+        @"
     ------- Query Output (1 rows) -------
     +---------------------------------+------------------------+
     | count(DISTINCT parquet_table.a) | count(parquet_table.b) |
@@ -475,10 +475,12 @@ async fn query_single_parquet_file() {
     +---------------------------------+------------------------+
     ------- Object Store Request Summary -------
     RequestCountingObjectStore()
-    Total Requests: 3
+    Total Requests: 5
     - HEAD path=parquet_table.parquet
-    - GET  (ranges) path=parquet_table.parquet ranges=4-534,534-1064
-    - GET  (ranges) path=parquet_table.parquet ranges=1064-1594,1594-2124
+    - GET  (range) range=4-534 path=parquet_table.parquet
+    - GET  (range) range=534-1064 path=parquet_table.parquet
+    - GET  (range) range=1064-1594 path=parquet_table.parquet
+    - GET  (range) range=1594-2124 path=parquet_table.parquet
     "
     );
 }
@@ -490,7 +492,7 @@ async fn query_single_parquet_file_with_single_predicate() {
     // (to evaluate predicates)
     assert_snapshot!(
         test.query("select min(a), max(b) from parquet_table WHERE a > 150").await,
-        @r"
+        @"
     ------- Query Output (1 rows) -------
     +----------------------+----------------------+
     | min(parquet_table.a) | max(parquet_table.b) |
@@ -499,9 +501,12 @@ async fn query_single_parquet_file_with_single_predicate() {
     +----------------------+----------------------+
     ------- Object Store Request Summary -------
     RequestCountingObjectStore()
-    Total Requests: 2
+    Total Requests: 5
     - HEAD path=parquet_table.parquet
-    - GET  (ranges) path=parquet_table.parquet ranges=1064-1481,1481-1594,1594-2011,2011-2124
+    - GET  (range) range=1064-1481 path=parquet_table.parquet
+    - GET  (range) range=1481-1594 path=parquet_table.parquet
+    - GET  (range) range=1594-2011 path=parquet_table.parquet
+    - GET  (range) range=2011-2124 path=parquet_table.parquet
     "
     );
 }
@@ -514,7 +519,7 @@ async fn query_single_parquet_file_multi_row_groups_multiple_predicates() {
     // (to evaluate predicates)
     assert_snapshot!(
         test.query("select min(a), max(b) from parquet_table WHERE a > 50 AND b < 1150").await,
-        @r"
+        @"
     ------- Query Output (1 rows) -------
     +----------------------+----------------------+
     | min(parquet_table.a) | max(parquet_table.b) |
@@ -523,10 +528,16 @@ async fn query_single_parquet_file_multi_row_groups_multiple_predicates() {
     +----------------------+----------------------+
     ------- Object Store Request Summary -------
     RequestCountingObjectStore()
-    Total Requests: 3
+    Total Requests: 9
     - HEAD path=parquet_table.parquet
-    - GET  (ranges) path=parquet_table.parquet ranges=4-421,421-534,534-951,951-1064
-    - GET  (ranges) path=parquet_table.parquet ranges=1064-1481,1481-1594,1594-2011,2011-2124
+    - GET  (range) range=4-421 path=parquet_table.parquet
+    - GET  (range) range=421-534 path=parquet_table.parquet
+    - GET  (range) range=534-951 path=parquet_table.parquet
+    - GET  (range) range=951-1064 path=parquet_table.parquet
+    - GET  (range) range=1064-1481 path=parquet_table.parquet
+    - GET  (range) range=1481-1594 path=parquet_table.parquet
+    - GET  (range) range=1594-2011 path=parquet_table.parquet
+    - GET  (range) range=2011-2124 path=parquet_table.parquet
     "
     );
 }
