@@ -24,18 +24,20 @@
 //! 4. Early termination is enabled for TopK queries
 //! 5. Prefix matching works correctly
 
+use datafusion_common::config::ConfigOptions;
 use datafusion_physical_expr::expressions;
 use datafusion_physical_expr_common::physical_expr::PhysicalExpr;
 use datafusion_physical_expr_common::sort_expr::LexOrdering;
 use datafusion_physical_optimizer::PhysicalOptimizerRule;
 use datafusion_physical_optimizer::pushdown_sort::PushdownSort;
+use datafusion_physical_optimizer::sanity_checker::SanityCheckPlan;
 use std::sync::Arc;
 
 use crate::physical_optimizer::test_utils::{
     OptimizationTest, coalesce_batches_exec, coalesce_partitions_exec, exact_test_scan,
     parquet_exec, parquet_exec_with_sort, projection_exec, projection_exec_with_alias,
     repartition_exec, schema, simple_projection_exec, sort_exec, sort_exec_with_fetch,
-    sort_expr, sort_expr_named, test_scan_with_ordering,
+    sort_expr, sort_expr_named, spr_repartition_exec, test_scan_with_ordering,
 };
 
 #[test]
@@ -1158,6 +1160,46 @@ fn test_sort_pushdown_exact_preserves_fetch_through_projection() {
         Ok:
           - ProjectionExec: expr=[b@1 as b, a@0 as a]
           -   ExactTestScan: ordered=[b@1 ASC], fetch=10
+    "
+    );
+}
+
+#[test]
+fn test_sort_pushdown_exact_preserves_fetch_after_ordered_repartition() {
+    let schema = schema();
+    let source = exact_test_scan(schema.clone());
+
+    let repartition = spr_repartition_exec(source);
+    let projection = simple_projection_exec(repartition, vec![1, 0]);
+
+    let b_expr_at_0 = sort_expr_named("b", 0);
+    let ordering = LexOrdering::new(vec![b_expr_at_0]).unwrap();
+    let plan = sort_exec_with_fetch(ordering, Some(10), projection);
+
+    let mut config = ConfigOptions::new();
+    config.optimizer.enable_sort_pushdown = true;
+    let optimized = PushdownSort::new()
+        .optimize(Arc::clone(&plan), &config)
+        .expect("push down sort");
+    SanityCheckPlan::new()
+        .optimize(optimized, &config)
+        .expect("pushdown sort should preserve distribution requirements");
+
+    insta::assert_snapshot!(
+        OptimizationTest::new(plan, PushdownSort::new(), true),
+        @r"
+    OptimizationTest:
+      input:
+        - SortExec: TopK(fetch=10), expr=[b@0 ASC], preserve_partitioning=[false]
+        -   ProjectionExec: expr=[b@1 as b, a@0 as a]
+        -     RepartitionExec: partitioning=RoundRobinBatch(10), input_partitions=1
+        -       ExactTestScan
+      output:
+        Ok:
+          - SortPreservingMergeExec: [b@0 ASC], fetch=10
+          -   ProjectionExec: expr=[b@1 as b, a@0 as a]
+          -     RepartitionExec: partitioning=RoundRobinBatch(10), input_partitions=1, maintains_sort_order=true
+          -       ExactTestScan: ordered=[b@1 ASC]
     "
     );
 }

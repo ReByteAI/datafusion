@@ -53,10 +53,12 @@ use crate::PhysicalOptimizerRule;
 use datafusion_common::Result;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
-use datafusion_physical_plan::ExecutionPlan;
 use datafusion_physical_plan::SortOrderPushdownResult;
+use datafusion_physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion_physical_plan::limit::GlobalLimitExec;
 use datafusion_physical_plan::sorts::sort::SortExec;
+use datafusion_physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
+use datafusion_physical_plan::{ExecutionPlan, ExecutionPlanProperties};
 use std::sync::Arc;
 
 /// A PhysicalOptimizerRule that attempts to push down sort requirements to data sources.
@@ -106,13 +108,7 @@ impl PhysicalOptimizerRule for PushdownSort {
                     // Note: LimitPushdown runs *before* PushdownSort in the optimizer
                     // pipeline, so we need to handle the limit manually here.
                     if let Some(fetch) = sort_exec.fetch() {
-                        let limited = inner
-                            .with_fetch(Some(fetch))
-                            .unwrap_or_else(|| {
-                                Arc::new(GlobalLimitExec::new(
-                                    inner, 0, Some(fetch),
-                                ))
-                            });
+                        let limited = preserve_fetch_after_exact_pushdown(inner, fetch);
                         Ok(Transformed::yes(limited))
                     } else {
                         Ok(Transformed::yes(inner))
@@ -146,4 +142,26 @@ impl PhysicalOptimizerRule for PushdownSort {
     fn schema_check(&self) -> bool {
         true
     }
+}
+
+fn preserve_fetch_after_exact_pushdown(
+    plan: Arc<dyn ExecutionPlan>,
+    fetch: usize,
+) -> Arc<dyn ExecutionPlan> {
+    if let Some(limited) = plan.with_fetch(Some(fetch)) {
+        return limited;
+    }
+
+    if plan.output_partitioning().partition_count() > 1 {
+        if let Some(ordering) = plan.output_ordering() {
+            return Arc::new(
+                SortPreservingMergeExec::new(ordering.clone(), plan)
+                    .with_fetch(Some(fetch)),
+            );
+        }
+
+        return Arc::new(CoalescePartitionsExec::new(plan).with_fetch(Some(fetch)));
+    }
+
+    Arc::new(GlobalLimitExec::new(plan, 0, Some(fetch)))
 }
