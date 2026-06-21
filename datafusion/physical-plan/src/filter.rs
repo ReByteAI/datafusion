@@ -202,6 +202,35 @@ impl FilterExec {
         self.projection.as_ref()
     }
 
+    fn projection_exprs_for_input(&self) -> Option<Vec<ProjectionExpr>> {
+        self.projection().map(|projection_indices| {
+            let input_schema = self.input.schema();
+            projection_indices
+                .iter()
+                .map(|index| {
+                    let field = input_schema.field(*index);
+                    ProjectionExpr {
+                        expr: Arc::new(Column::new(field.name(), *index))
+                            as Arc<dyn PhysicalExpr>,
+                        alias: field.name().to_string(),
+                    }
+                })
+                .collect()
+        })
+    }
+
+    fn remap_parent_filter_to_input(
+        &self,
+        filter: &Arc<dyn PhysicalExpr>,
+    ) -> Result<Arc<dyn PhysicalExpr>> {
+        let Some(projection_exprs) = self.projection_exprs_for_input() else {
+            return Ok(Arc::clone(filter));
+        };
+
+        Ok(update_expr(filter, &projection_exprs, true)?
+            .unwrap_or_else(|| Arc::clone(filter)))
+    }
+
     /// Calculates `Statistics` for `FilterExec`, by applying selectivity (either default, or estimated) to input statistics.
     fn statistics_helper(
         schema: &SchemaRef,
@@ -526,15 +555,23 @@ impl ExecutionPlan for FilterExec {
         if !matches!(phase, FilterPushdownPhase::Pre) {
             // For non-pre phase, filters pass through unchanged
             let filter_supports = parent_filters
-                .into_iter()
-                .map(PushedDownPredicate::supported)
-                .collect();
+                .iter()
+                .map(|filter| {
+                    self.remap_parent_filter_to_input(filter)
+                        .map(PushedDownPredicate::supported)
+                })
+                .collect::<Result<_>>()?;
 
             return Ok(FilterDescription::new().with_child(ChildFilterDescription {
                 parent_filters: filter_supports,
                 self_filters: vec![],
             }));
         }
+
+        let parent_filters = parent_filters
+            .iter()
+            .map(|filter| self.remap_parent_filter_to_input(filter))
+            .collect::<Result<Vec<_>>>()?;
 
         let child = ChildFilterDescription::from_child(&parent_filters, self.input())?
             .with_self_filters(
@@ -557,10 +594,12 @@ impl ExecutionPlan for FilterExec {
             return Ok(FilterPushdownPropagation::if_all(child_pushdown_result));
         }
         // We absorb any parent filters that were not handled by our children
-        let unsupported_parent_filters =
-            child_pushdown_result.parent_filters.iter().filter_map(|f| {
-                matches!(f.all(), PushedDown::No).then_some(Arc::clone(&f.filter))
-            });
+        let unsupported_parent_filters = child_pushdown_result
+            .parent_filters
+            .iter()
+            .filter_map(|f| matches!(f.all(), PushedDown::No).then_some(&f.filter))
+            .map(|filter| self.remap_parent_filter_to_input(filter))
+            .collect::<Result<Vec<_>>>()?;
         let unsupported_self_filters = child_pushdown_result
             .self_filters
             .first()
@@ -620,7 +659,7 @@ impl ExecutionPlan for FilterExec {
                     self.default_selectivity,
                     self.projection.as_ref(),
                 )?,
-                projection: None,
+                projection: self.projection.clone(),
                 batch_size: self.batch_size,
                 fetch: self.fetch,
             };
@@ -1752,9 +1791,11 @@ mod tests {
 
         // Test that .get() returns Some for valid indices
         assert!(column_statistics.get(0).is_some_and(|cs| cs.is_singleton()));
-        assert!(column_statistics
-            .get(1)
-            .is_some_and(|cs| !cs.is_singleton()));
+        assert!(
+            column_statistics
+                .get(1)
+                .is_some_and(|cs| !cs.is_singleton())
+        );
 
         // Test that .get() returns None for out-of-bounds indices (the key fix)
         assert!(column_statistics.get(2).is_none());
@@ -1823,6 +1864,76 @@ mod tests {
             display, "c@2",
             "Post-phase parent filter column index must be remapped \
              from output schema (c@0) to input schema (c@2)"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter_with_projection_remaps_absorbed_pre_phase_parent_filters() -> Result<()>
+    {
+        let input_schema = Arc::new(Schema::new(vec![
+            Field::new("a", DataType::Int32, false),
+            Field::new("b", DataType::Utf8, false),
+            Field::new("c", DataType::Int32, false),
+        ]));
+        let input = Arc::new(EmptyExec::new(Arc::clone(&input_schema)));
+
+        // FilterExec: a > 0, projection=[b@1, c@2]
+        let self_predicate = Arc::new(BinaryExpr::new(
+            Arc::new(Column::new("a", 0)),
+            Operator::Gt,
+            Arc::new(Literal::new(ScalarValue::Int32(Some(0)))),
+        )) as Arc<dyn PhysicalExpr>;
+        let filter = FilterExec::try_new(Arc::clone(&self_predicate), input)?
+            .with_projection(Some(vec![1, 2]))?;
+
+        // Parent filter references the projected output schema: b@0.
+        let parent_filter = Arc::new(BinaryExpr::new(
+            Arc::new(Column::new("b", 0)),
+            Operator::Eq,
+            Arc::new(Literal::new(ScalarValue::Utf8(Some("x".to_string())))),
+        )) as Arc<dyn PhysicalExpr>;
+
+        let propagation = filter.handle_child_pushdown_result(
+            FilterPushdownPhase::Pre,
+            ChildPushdownResult {
+                parent_filters: vec![crate::filter_pushdown::ChildFilterPushdownResult {
+                    filter: Arc::clone(&parent_filter),
+                    child_results: vec![PushedDown::No],
+                }],
+                self_filters: vec![vec![PushedDownPredicate::unsupported(Arc::clone(
+                    &self_predicate,
+                ))]],
+            },
+            &ConfigOptions::new(),
+        )?;
+
+        assert!(matches!(propagation.filters.as_slice(), [PushedDown::Yes]));
+        let updated_node = propagation.updated_node.expect("updated node");
+        let updated_filter = updated_node
+            .as_any()
+            .downcast_ref::<FilterExec>()
+            .expect("updated node should remain a FilterExec");
+
+        assert_eq!(updated_filter.projection(), Some(&vec![1, 2]));
+        let predicate = format!("{}", updated_filter.predicate());
+        assert!(
+            predicate.contains("b@1"),
+            "absorbed parent filter must be remapped to input column b@1, got {predicate}"
+        );
+        assert!(
+            !predicate.contains("b@0"),
+            "absorbed parent filter must not keep projected column b@0, got {predicate}"
+        );
+        assert_eq!(
+            updated_filter
+                .schema()
+                .fields()
+                .iter()
+                .map(|field| field.name().as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "c"]
         );
 
         Ok(())
