@@ -43,7 +43,7 @@ use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_physical_expr_common::sort_expr::{
     LexOrdering, PhysicalSortExpr, PhysicalSortRequirement, OrderingRequirements
 };
-use datafusion_physical_expr::{Distribution, Partitioning};
+use datafusion_physical_expr::{Distribution, Partitioning, PhysicalExpr};
 use datafusion_physical_expr::expressions::{col, BinaryExpr, Column, NotExpr};
 use datafusion_physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
 use datafusion_physical_plan::repartition::RepartitionExec;
@@ -57,6 +57,7 @@ use datafusion_physical_optimizer::enforce_sorting::replace_with_order_preservin
 use datafusion_physical_optimizer::enforce_sorting::sort_pushdown::{SortPushDown, assign_initial_requirements, pushdown_sorts};
 use datafusion_physical_optimizer::enforce_distribution::EnforceDistribution;
 use datafusion_physical_optimizer::output_requirements::OutputRequirementExec;
+use datafusion_physical_optimizer::sanity_checker::SanityCheckPlan;
 use datafusion_physical_optimizer::PhysicalOptimizerRule;
 use datafusion::prelude::*;
 use arrow::array::{Int32Array, RecordBatch};
@@ -223,6 +224,92 @@ async fn test_remove_unnecessary_sort5() -> Result<()> {
       DataSourceExec: partitions=1, partition_sizes=[0]
       DataSourceExec: file_groups={1 group: [[x]]}, projection=[a, b, c, d, e], output_ordering=[a@0 ASC], file_type=parquet
     ");
+    Ok(())
+}
+
+/// Regression for a fetch-bearing global sort pushed through a projection that
+/// moves `score` from child index 2 to output index 1.
+fn reordering_projection_topk_plan() -> Result<Arc<dyn ExecutionPlan>> {
+    let schema = create_test_schema3()?;
+    let source = parquet_exec(Arc::clone(&schema));
+    let repartitioned = repartition_exec(source);
+
+    let score_expr = Arc::new(BinaryExpr::new(
+        col("c", &schema)?,
+        Operator::Plus,
+        col("d", &schema)?,
+    )) as Arc<dyn PhysicalExpr>;
+    let inner_ordering: LexOrdering = [PhysicalSortExpr {
+        expr: Arc::clone(&score_expr),
+        options: SortOptions {
+            descending: true,
+            nulls_first: false,
+        },
+    }]
+    .into();
+    let inner_sort = Arc::new(
+        SortExec::new(inner_ordering, repartitioned)
+            .with_fetch(Some(1000))
+            .with_preserve_partitioning(true),
+    );
+
+    let lower = projection_exec(
+        vec![
+            (col("a", &schema)?, "a".to_string()),
+            (col("b", &schema)?, "b".to_string()),
+            (Arc::clone(&score_expr), "score".to_string()),
+        ],
+        inner_sort,
+    )?;
+    let lower_schema = lower.schema();
+    let upper = projection_exec(
+        vec![
+            (col("a", &lower_schema)?, "a".to_string()),
+            (col("score", &lower_schema)?, "score".to_string()),
+            (col("b", &lower_schema)?, "value".to_string()),
+        ],
+        lower,
+    )?;
+
+    let upper_schema = upper.schema();
+    let ordering: LexOrdering = [
+        sort_expr_options(
+            "score",
+            &upper_schema,
+            SortOptions {
+                descending: true,
+                nulls_first: false,
+            },
+        ),
+        sort_expr("a", &upper_schema),
+    ]
+    .into();
+    Ok(sort_exec_with_fetch(
+        ordering,
+        Some(4),
+        coalesce_partitions_exec(upper),
+    ))
+}
+
+#[test]
+fn parallelize_sorts_remaps_index_through_reordering_projection() -> Result<()> {
+    let mut config = ConfigOptions::new();
+    config.optimizer.repartition_sorts = true;
+    let optimized =
+        EnforceSorting::new().optimize(reordering_projection_topk_plan()?, &config)?;
+
+    SanityCheckPlan::new().optimize(Arc::clone(&optimized), &config)?;
+
+    let plan = displayable(optimized.as_ref()).indent(true).to_string();
+    assert!(
+        plan.contains("SortPreservingMergeExec: [score@1 DESC NULLS LAST, a@0 ASC"),
+        "global merge should use the projection output index for score:\n{plan}"
+    );
+    assert!(
+        plan.contains("SortExec: TopK(fetch=4), expr=[score@2 DESC NULLS LAST, a@0 ASC"),
+        "local sort should use the projection child index for score:\n{plan}"
+    );
+
     Ok(())
 }
 

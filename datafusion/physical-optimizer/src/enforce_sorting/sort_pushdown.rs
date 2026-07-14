@@ -42,7 +42,7 @@ use datafusion_physical_plan::joins::utils::{
     ColumnIndex, calculate_join_output_ordering,
 };
 use datafusion_physical_plan::joins::{HashJoinExec, SortMergeJoinExec};
-use datafusion_physical_plan::projection::ProjectionExec;
+use datafusion_physical_plan::projection::{ProjectionExec, ProjectionExpr};
 use datafusion_physical_plan::repartition::RepartitionExec;
 use datafusion_physical_plan::sorts::sort::SortExec;
 use datafusion_physical_plan::tree_node::PlanContext;
@@ -304,14 +304,28 @@ fn pushdown_requirement_to_children(
         // Push down through operator with fetch when:
         // - requirement is aligned with output ordering
         // - it preserves ordering during execution
+        //
+        // A `ProjectionExec` can reorder columns, so its output ordering
+        // requirement must be remapped to the child schema before pushdown.
+        // Forwarding it unchanged can make a sort key reference a different
+        // child column at the same index.
+        let child_required =
+            if let Some(projection) = plan.as_any().downcast_ref::<ProjectionExec>() {
+                match remap_requirement_through_projection(projection, &parent_required) {
+                    Some(remapped) => remapped,
+                    None => return Ok(None),
+                }
+            } else {
+                parent_required.clone()
+            };
         let Some(ordering) = plan.properties().output_ordering() else {
-            return Ok(Some(vec![Some(parent_required)]));
+            return Ok(Some(vec![Some(child_required)]));
         };
         if plan.properties().eq_properties.requirements_compatible(
             parent_required.first().clone(),
             ordering.clone().into(),
         ) {
-            Ok(Some(vec![Some(parent_required)]))
+            Ok(Some(vec![Some(child_required)]))
         } else {
             Ok(None)
         }
@@ -360,7 +374,8 @@ fn pushdown_requirement_to_children(
         || !maintains_input_order.iter().any(|o| *o)
         || plan.as_any().is::<RepartitionExec>()
         || plan.as_any().is::<FilterExec>()
-        // TODO: Add support for Projection push down
+        // A fetch-bearing `ProjectionExec` is handled above. Without a fetch,
+        // keep the sort above the projection.
         || plan.as_any().is::<ProjectionExec>()
         || pushdown_would_violate_requirements(&parent_required, plan.as_ref())
     {
@@ -388,7 +403,38 @@ fn pushdown_requirement_to_children(
     } else {
         handle_custom_pushdown(plan, parent_required, &maintains_input_order)
     }
-    // TODO: Add support for Projection push down
+}
+
+/// Remap an ordering requirement from a [`ProjectionExec`]'s output schema to
+/// its child schema. Alternatives containing computed projection expressions
+/// cannot be expressed below the projection and are discarded.
+fn remap_requirement_through_projection(
+    projection: &ProjectionExec,
+    parent_required: &OrderingRequirements,
+) -> Option<OrderingRequirements> {
+    let exprs = projection.expr();
+    let (alternatives, soft) = parent_required.clone().into_alternatives();
+    let remapped = alternatives
+        .iter()
+        .filter_map(|req| remap_lex_requirement_through_projection(exprs, req));
+    OrderingRequirements::new_alternatives(remapped, soft)
+}
+
+fn remap_lex_requirement_through_projection(
+    exprs: &[ProjectionExpr],
+    requirement: &LexRequirement,
+) -> Option<LexRequirement> {
+    let mut child_requirements = Vec::with_capacity(requirement.len());
+    for sort_requirement in requirement.iter() {
+        let output_column = sort_requirement.expr.as_any().downcast_ref::<Column>()?;
+        let projection_expr = exprs.get(output_column.index())?;
+        let child_column = projection_expr.expr.as_any().downcast_ref::<Column>()?;
+        child_requirements.push(PhysicalSortRequirement::new(
+            Arc::new(child_column.clone()),
+            sort_requirement.options,
+        ));
+    }
+    LexRequirement::new(child_requirements)
 }
 
 /// Try to push sorting through  [`AggregateExec`]
@@ -879,4 +925,103 @@ enum RequirementsCompatibility {
     Compatible(Option<OrderingRequirements>),
     /// Requirements not compatible
     NonCompatible,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use arrow::compute::SortOptions;
+    use arrow::datatypes::{DataType, Field, Schema};
+    use datafusion_expr::Operator;
+    use datafusion_physical_expr::PhysicalExpr;
+    use datafusion_physical_expr::expressions::{BinaryExpr, col};
+    use datafusion_physical_plan::empty::EmptyExec;
+
+    fn child_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, true),
+            Field::new("value", DataType::Int32, true),
+            Field::new("score", DataType::Int32, true),
+        ]))
+    }
+
+    fn sort_requirement(name: &str, schema: &Schema) -> PhysicalSortRequirement {
+        PhysicalSortRequirement::new(
+            col(name, schema).expect("sort column should exist"),
+            Some(SortOptions {
+                descending: true,
+                nulls_first: false,
+            }),
+        )
+    }
+
+    #[test]
+    fn remaps_requirement_through_reordering_projection() {
+        let child_schema = child_schema();
+        let input = Arc::new(EmptyExec::new(Arc::clone(&child_schema)));
+        let projection = ProjectionExec::try_new(
+            vec![
+                ProjectionExpr::new(
+                    col("id", &child_schema).expect("id should exist"),
+                    "id",
+                ),
+                ProjectionExpr::new(
+                    col("score", &child_schema).expect("score should exist"),
+                    "score",
+                ),
+                ProjectionExpr::new(
+                    col("value", &child_schema).expect("value should exist"),
+                    "value",
+                ),
+            ],
+            input,
+        )
+        .expect("projection should be valid");
+        let output_schema = projection.schema();
+        let requirement = OrderingRequirements::new(
+            LexRequirement::new([sort_requirement("score", &output_schema)])
+                .expect("requirement should not be empty"),
+        );
+
+        let remapped = remap_requirement_through_projection(&projection, &requirement)
+            .expect("column projection should be remappable");
+        let expected = OrderingRequirements::new(
+            LexRequirement::new([sort_requirement("score", &child_schema)])
+                .expect("requirement should not be empty"),
+        );
+
+        assert_eq!(remapped, expected);
+    }
+
+    #[test]
+    fn declines_computed_projection_requirement() {
+        let child_schema = child_schema();
+        let input = Arc::new(EmptyExec::new(Arc::clone(&child_schema)));
+        let computed_score = Arc::new(BinaryExpr::new(
+            col("value", &child_schema).expect("value should exist"),
+            Operator::Plus,
+            col("score", &child_schema).expect("score should exist"),
+        )) as Arc<dyn PhysicalExpr>;
+        let projection = ProjectionExec::try_new(
+            vec![
+                ProjectionExpr::new(
+                    col("id", &child_schema).expect("id should exist"),
+                    "id",
+                ),
+                ProjectionExpr::new(computed_score, "computed_score"),
+            ],
+            input,
+        )
+        .expect("projection should be valid");
+        let output_schema = projection.schema();
+        let requirement = OrderingRequirements::new(
+            LexRequirement::new([sort_requirement("computed_score", &output_schema)])
+                .expect("requirement should not be empty"),
+        );
+
+        assert!(
+            remap_requirement_through_projection(&projection, &requirement).is_none()
+        );
+    }
 }
